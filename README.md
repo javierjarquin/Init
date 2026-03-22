@@ -63,11 +63,16 @@ claude-code-starter-kit/
 
 ### Opción 1: Script automático
 
-```bash
-# Clonar el starter kit
-git clone https://github.com/tu-org/claude-code-starter-kit.git
+**Windows (CMD o PowerShell):**
+```cmd
+git clone https://github.com/javierjarquin/Init.git claude-code-starter-kit
+cd claude-code-starter-kit
+setup.bat C:\ruta\a\tu\proyecto
+```
 
-# Ejecutar setup apuntando a tu proyecto
+**Linux / Mac:**
+```bash
+git clone https://github.com/javierjarquin/Init.git claude-code-starter-kit
 cd claude-code-starter-kit
 chmod +x setup.sh
 ./setup.sh /ruta/a/tu/proyecto
