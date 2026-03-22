@@ -1,5 +1,7 @@
 # Claude Code Starter Kit
 
+> Kit completo para iniciar y mantener un sistema explotando al buen Claudio.
+
 **Kit de inicio para maximizar el uso de Claude Code en cualquier proyecto de software.**
 
 Incluye **24 slash commands** (skills), templates de procesos, GitHub templates, y documentación operacional lista para usar. Diseñado para equipos que quieren un workflow profesional de desarrollo desde el día 1.
