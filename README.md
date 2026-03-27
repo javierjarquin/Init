@@ -4,7 +4,7 @@
 
 **Kit de inicio para maximizar el uso de Claude Code en cualquier proyecto de software.**
 
-Incluye **24 slash commands** (skills), templates de procesos, GitHub templates, y documentación operacional lista para usar. Diseñado para equipos que quieren un workflow profesional de desarrollo desde el día 1.
+Incluye **29 slash commands** (skills), templates de procesos, GitHub templates, y documentación operacional lista para usar. Diseñado para equipos que quieren un workflow profesional de desarrollo desde el día 1.
 
 ---
 
@@ -13,7 +13,7 @@ Incluye **24 slash commands** (skills), templates de procesos, GitHub templates,
 ```
 claude-code-starter-kit/
 ├── .claude/
-│   ├── commands/              ← 24 slash commands (skills)
+│   ├── commands/              ← 29 slash commands (skills)
 │   │   ├── feature.md         ← Scaffold de features
 │   │   ├── test-unit.md       ← Tests unitarios
 │   │   ├── e2e.md             ← Tests E2E
@@ -192,9 +192,20 @@ claude
 | Skill | Qué hace | Ejemplo |
 |-------|----------|---------|
 | `/review-pr` | Review de PR en 5 dimensiones | `/review-pr 42` |
+| `/code-review` | Checklist técnico de 10 puntos (hydration, RLS, CSS, forms, auth) | `/code-review --full` |
+| `/validate` | Workflow pre-merge: review + build + smoke test | `/validate --fix` |
+| `/standards` | Buenas prácticas con ejemplos CORRECTO vs INCORRECTO | `/standards front` |
 | `/security-scan` | Escaneo completo de seguridad | `/security-scan` |
 | `/perf` | Análisis de performance | `/perf api` |
 | `/audit` | Auditoría de coherencia negocio | `/audit all` |
+| `/ux-review` | Auditoría visual UX/UI con screenshots | `/ux-review mobile` |
+
+### Business Flows
+
+| Skill | Qué hace | Ejemplo |
+|-------|----------|---------|
+| `/flows` | Consultar y validar flujos de negocio documentados | `/flows validate` |
+| `/flow-test` | Pruebas E2E de flujos completos con Playwright | `/flow-test os fix` |
 
 ### Project Management
 
@@ -337,6 +348,64 @@ claude
 # 5. Si algo falla
 > /rollback prod
 → Revierte al deploy anterior inmediatamente
+```
+
+### Workflow 6: Quality gate completo (antes de release)
+
+```
+# 1. Code review técnico
+> /code-review --full
+→ Claude aplica checklist de 10 puntos: hydration, RLS, CSS, forms, auth, etc.
+
+# 2. Standards check
+> /standards
+→ Verifica patrones correctos vs incorrectos en todo el proyecto
+
+# 3. Validación pre-merge
+> /validate --fix
+→ Code review + refactor + TypeScript build + smoke test con Playwright
+
+# 4. Business flow testing
+> /flow-test completo fix
+→ Ejecuta todos los flujos de negocio E2E, corrige fallos automáticamente
+
+# 5. UX Review
+> /ux-review
+→ Screenshots desktop + mobile, checa layout, botones, responsive
+
+# 6. QA final
+> /qa all
+→ Ejecuta suite E2E completa (206+ tests)
+
+# 7. Si todo pasa → deploy
+> /deploy-prod
+```
+
+### Workflow 7: Nuevo proyecto desde cero
+
+```
+# 1. Clonar el starter kit
+git clone https://github.com/javierjarquin/Init.git claude-code-starter-kit
+cd claude-code-starter-kit
+setup.bat C:\ruta\a\mi-nuevo-proyecto
+
+# 2. Configurar CLAUDE.md con tu stack
+> Abre CLAUDE.md y reemplaza los placeholders
+
+# 3. Crear la feature principal
+> /feature "core-module"
+
+# 4. Documentar flujos de negocio
+> /flows add "order-lifecycle"
+
+# 5. Crear tests E2E
+> /e2e create "main flow"
+
+# 6. Review completo
+> /validate --fix
+
+# 7. Deploy
+> /deploy-dev
 ```
 
 ---
