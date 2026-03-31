@@ -1,0 +1,148 @@
+# Security — Escaneo automatico de vulnerabilidades
+#
+# Corre semanalmente y en cada PR.
+# Detecta dependencias vulnerables, secrets filtrados y codigo inseguro.
+
+name: Security Scan
+
+on:
+  pull_request:
+    branches: [main, development]
+  schedule:
+    # Cada lunes a las 8:00 AM UTC
+    - cron: "0 8 * * 1"
+  workflow_dispatch:  # Permite ejecucion manual
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Node.js ---
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Descomenta segun tu package manager:
+      - name: Audit (npm)
+        run: npm audit --audit-level=high || true
+        continue-on-error: true
+
+      # - name: Audit (pnpm)
+      #   run: pnpm audit --audit-level=high || true
+
+      # - name: Audit (yarn)
+      #   run: yarn audit --level high || true
+
+      # --- Python (descomenta si aplica) ---
+      # - uses: actions/setup-python@v5
+      #   with:
+      #     python-version: "3.12"
+      # - name: Audit Python deps
+      #   run: |
+      #     pip install pip-audit
+      #     pip-audit -r requirements.txt || true
+
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Historial completo para detectar secrets en commits
+
+      - name: TruffleHog (secret scanner)
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified
+
+      - name: Check for common secret patterns
+        run: |
+          echo "Scanning for hardcoded secrets..."
+          FOUND=0
+
+          # API keys
+          if grep -rn "sk_live\|pk_live\|AKIA[0-9A-Z]\|ghp_[a-zA-Z0-9]\|gho_[a-zA-Z0-9]" --include="*.ts" --include="*.js" --include="*.py" --include="*.go" --include="*.rb" --include="*.env" . 2>/dev/null; then
+            echo "⚠️ Possible API keys found"
+            FOUND=1
+          fi
+
+          # Private keys
+          if find . -name "*.pem" -o -name "*.key" -o -name "*.p12" | grep -v node_modules | grep -v .git | head -5 | grep .; then
+            echo "⚠️ Private key files found in repo"
+            FOUND=1
+          fi
+
+          # .env files (not .env.example)
+          if find . -name ".env" -not -name ".env.example" -not -name ".env.template" -not -path "*/node_modules/*" -not -path "*/.git/*" | grep .; then
+            echo "⚠️ .env files found in repo"
+            FOUND=1
+          fi
+
+          if [ "$FOUND" -eq 1 ]; then
+            echo "::warning::Potential secrets detected — review the findings above"
+          else
+            echo "✅ No secrets detected"
+          fi
+
+  code-analysis:
+    name: Code Security Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for insecure patterns
+        run: |
+          echo "=== Scanning for insecure code patterns ==="
+          ISSUES=0
+
+          # SQL injection
+          echo "--- SQL Injection ---"
+          if grep -rn "query(\`\|execute(\`\|raw(\`" --include="*.ts" --include="*.js" . 2>/dev/null | grep -v node_modules | grep -v ".test." | head -10 | grep .; then
+            echo "⚠️ Possible raw SQL queries (potential SQL injection)"
+            ISSUES=$((ISSUES+1))
+          fi
+
+          # XSS
+          echo "--- XSS ---"
+          if grep -rn "dangerouslySetInnerHTML\|innerHTML\|v-html" --include="*.tsx" --include="*.jsx" --include="*.vue" . 2>/dev/null | grep -v node_modules | head -10 | grep .; then
+            echo "⚠️ Possible XSS vectors"
+            ISSUES=$((ISSUES+1))
+          fi
+
+          # eval
+          echo "--- eval/Function ---"
+          if grep -rn "eval(\|new Function(" --include="*.ts" --include="*.js" . 2>/dev/null | grep -v node_modules | grep -v ".test." | head -10 | grep .; then
+            echo "⚠️ eval() or new Function() usage"
+            ISSUES=$((ISSUES+1))
+          fi
+
+          # Command injection
+          echo "--- Command Injection ---"
+          if grep -rn "exec(\|execSync(\|spawn(" --include="*.ts" --include="*.js" . 2>/dev/null | grep -v node_modules | grep -v ".test." | head -10 | grep .; then
+            echo "⚠️ Possible command injection vectors"
+            ISSUES=$((ISSUES+1))
+          fi
+
+          echo ""
+          if [ "$ISSUES" -gt 0 ]; then
+            echo "::warning::Found $ISSUES potential security issues — review manually"
+          else
+            echo "✅ No obvious insecure patterns found"
+          fi
+
+      # CodeQL (analisis profundo de GitHub)
+      # Descomenta para habilitar:
+      # - name: Initialize CodeQL
+      #   uses: github/codeql-action/init@v3
+      #   with:
+      #     languages: javascript  # o python, go, ruby, etc.
+      #
+      # - name: Perform CodeQL Analysis
+      #   uses: github/codeql-action/analyze@v3

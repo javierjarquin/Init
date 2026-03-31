@@ -82,11 +82,41 @@
 {{SECURITY_NOTES}}
 <!-- Documenta aquí:
 - Auth strategy (JWT, sessions, OAuth)
-- RBAC roles
-- Rate limiting config
-- Encryption
-- Audit logging
+- RBAC roles and permissions per endpoint
+- Rate limiting config (requests per minute per endpoint)
+- Encryption: at rest (DB, files) and in transit (TLS/HTTPS)
+- Audit logging: what actions are logged, where, retention
+- CSRF protection strategy
+- Cookie security flags (httpOnly, secure, sameSite)
+- Password hashing algorithm (bcrypt/argon2/scrypt)
 -->
+
+### Safety Rules (DO NOT REMOVE)
+
+These rules are enforced by hooks in `settings.local.json` and MUST be respected:
+
+```
+BLOCKED OPERATIONS (require explicit user confirmation):
+❌ git push --force / -f        → Use --force-with-lease or normal push
+❌ git push origin main/master  → Use /deploy-prod or create a PR
+❌ git reset --hard             → Use git stash or git revert
+❌ migrate reset / db reset     → Use /migrate-db rollback (dev only)
+❌ DROP TABLE / DROP DATABASE   → Create inverse migration instead
+❌ TRUNCATE TABLE               → Use DELETE with WHERE clause
+❌ DELETE FROM (without WHERE)  → Always specify a WHERE clause
+```
+
+### Branch Protection (configure in GitHub)
+
+```
+Required for main and development branches:
+- [ ] Require pull request before merging
+- [ ] Require at least 1 approval
+- [ ] Require status checks to pass (CI workflow)
+- [ ] Require branches to be up to date
+- [ ] Do not allow force pushes
+- [ ] Do not allow deletions
+```
 
 ## Coding Conventions
 

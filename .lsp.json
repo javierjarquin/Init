@@ -1,0 +1,44 @@
+{
+  "// ─── INSTRUCCIONES ─────────────────────────────────────────────────": "",
+  "// LSP servers le dan a Claude Code inteligencia de codigo real:": "",
+  "// tipos, definiciones, errores de compilacion, autocompletado.": "",
+  "// Descomenta el servidor que corresponda a tu stack.": "",
+  "// ───────────────────────────────────────────────────────────────────": "",
+
+  "mcpServers": {
+    "// ─── TYPESCRIPT / JAVASCRIPT ────────────────────────────────────": {},
+    "// typescript": {
+      "// command": "npx",
+      "// args": ["-y", "typescript-language-server", "--stdio"],
+      "// description": "TypeScript/JavaScript — tipos, errores, definiciones"
+    },
+
+    "// ─── PYTHON ─────────────────────────────────────────────────────": {},
+    "// python": {
+      "// command": "pylsp",
+      "// args": [],
+      "// description": "Python — tipos, imports, errores (requiere python-lsp-server)"
+    },
+
+    "// ─── GO ─────────────────────────────────────────────────────────": {},
+    "// go": {
+      "// command": "gopls",
+      "// args": ["serve"],
+      "// description": "Go — tipos, definiciones, errores (requiere gopls instalado)"
+    },
+
+    "// ─── RUST ───────────────────────────────────────────────────────": {},
+    "// rust": {
+      "// command": "rust-analyzer",
+      "// args": [],
+      "// description": "Rust — tipos, lifetime checks, errores (requiere rust-analyzer)"
+    },
+
+    "// ─── CSS / TAILWIND ─────────────────────────────────────────────": {},
+    "// css": {
+      "// command": "npx",
+      "// args": ["-y", "vscode-css-languageserver-bin", "--stdio"],
+      "// description": "CSS/SCSS/Less — autocompletado, validacion"
+    }
+  }
+}

@@ -65,8 +65,41 @@ Gestión segura de migraciones de base de datos.
 2. Verificar que no duplica datos si se corre múltiples veces (idempotente)
 
 ## Reglas de seguridad
-- NUNCA `migrate reset` en producción
-- NUNCA `DROP TABLE` sin backup verificado
-- Siempre hacer backup antes de migrar en producción
+
+### OPERACIONES BLOQUEADAS (requieren confirmacion explicita del usuario)
+```
+❌ migrate reset       → Borra TODA la base de datos. PROHIBIDO en dev y prod.
+❌ DROP TABLE          → Irreversible sin backup. NUNCA sin confirmacion.
+❌ DROP DATABASE       → Catastrofico. NUNCA.
+❌ TRUNCATE TABLE      → Borra todos los registros. NUNCA sin confirmacion.
+❌ DELETE FROM (sin WHERE) → Borra todos los registros. NUNCA.
+❌ supabase db reset   → Borra TODO. PROHIBIDO.
+❌ prisma migrate reset → Borra TODO. PROHIBIDO.
+```
+
+### Reglas generales
+- NUNCA ejecutar operaciones destructivas sin confirmacion EXPLICITA del usuario
+- NUNCA `migrate reset` — ni en desarrollo, ni en produccion. Usar `rollback` para revertir
+- NUNCA `DROP TABLE` sin backup verificado Y confirmacion del usuario
+- Siempre hacer backup antes de migrar en produccion
 - Migraciones deben ser idempotentes cuando sea posible
-- Agregar datos default en la migración, no en el seed (para producción)
+- Agregar datos default en la migracion, no en el seed (para produccion)
+- En produccion: NUNCA usar rollback. Crear migracion nueva que revierta cambios
+- Verificar que la migracion tiene DOWN/rollback ANTES de aplicarla
+
+### Alternativas seguras
+```
+✅ migrate deploy      → Aplica migraciones pendientes (sin reset)
+✅ migrate rollback    → Revierte la ultima migracion (solo dev local)
+✅ Crear migracion inversa → Para revertir en produccion
+✅ Backup antes de migrar → pg_dump / mysqldump antes de cambios
+```
+
+### Por que NO usar reset ni en desarrollo
+Un `migrate reset` en desarrollo puede parecer inofensivo, pero:
+1. Si alguien conecta por error a la BD de staging/prod, pierde TODO
+2. Crea el habito de "resetear cuando algo falla" en vez de arreglar la migracion
+3. No prueba el flujo real de migraciones que correra en produccion
+4. Si hay datos de prueba que tardaste horas en crear, los pierdes
+
+La alternativa correcta: `migrate rollback` + corregir la migracion + `migrate run`

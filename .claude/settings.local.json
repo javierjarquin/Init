@@ -14,5 +14,138 @@
       "Bash(grep:*)",
       "Bash(find:*)"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '🚀 Claude Code session started at '$(date '+%Y-%m-%d %H:%M')"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$TOOL_INPUT\" | grep -qE 'push.*--force|push.*-f'; then echo '❌ BLOCKED: Force push detected. Use normal push or ask the user for explicit confirmation.' && exit 1; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$TOOL_INPUT\" | grep -qE 'migrate.*reset|db.*reset|DROP TABLE|DROP DATABASE|dropdb|drop schema'; then echo '❌ BLOCKED: Destructive database operation detected. NEVER run reset/drop without explicit user confirmation. Use /migrate-db rollback instead.' && exit 1; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$TOOL_INPUT\" | grep -qE 'push.*(main|master)$'; then echo '⚠️ WARNING: Pushing directly to main/master. Are you sure? Use /deploy-prod or create a PR instead.' && exit 1; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$TOOL_INPUT\" | grep -qE 'reset.*--hard'; then echo '⚠️ WARNING: git reset --hard detected. This will discard uncommitted changes. Confirm with user first.' && exit 1; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '📝 File modification detected'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '✅ Command executed'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"📋 Response completed at $(date '+%Y-%m-%d %H:%M'). Verify: Did you reference any file, function, or table without searching for it first? If so, correct your response.\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '💬 Prompt received at '$(date '+%H:%M:%S')"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '🔍 ANTI-HALLUCINATION REMINDER: Before referencing any function, table, file or endpoint — SEARCH for it first. Use REAL names from the code, not assumed names. If you cannot find it, say so clearly. Never invent paths, functions or structures that you have not verified with Read/Grep/Glob.'"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '🤖 Subagent finished at '$(date '+%H:%M:%S')"
+          }
+        ]
+      }
+    ],
+    "FileChanged": [
+      {
+        "matcher": ".env",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '⚠️ WARNING: .env file modified — verify no secrets are being committed'"
+          }
+        ]
+      },
+      {
+        "matcher": "package.json",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '📦 package.json changed — remember to run install'"
+          }
+        ]
+      }
+    ]
   }
 }
