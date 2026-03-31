@@ -158,8 +158,140 @@ docker exec db psql -U postgres -c "ALTER TABLE ..."
 npx supabase db reset  # PROHIBITED
 ```
 
+## API Security Standards
+
+### Rate Limiting
+
+**CORRECT:**
+```typescript
+// Express
+import rateLimit from 'express-rate-limit';
+const loginLimiter = rateLimit({ windowMs: 60 * 1000, max: 5, message: 'Too many login attempts' });
+app.post('/auth/login', loginLimiter, loginHandler);
+
+// NestJS
+@Throttle({ default: { limit: 5, ttl: 60000 } })
+@Post('auth/login')
+async login(@Body() dto: LoginDto) { ... }
+```
+
+**INCORRECT:**
+```typescript
+// NEVER — endpoints without rate limiting
+app.post('/auth/login', loginHandler); // Brute force vulnerable!
+app.post('/auth/register', registerHandler); // Spam vulnerable!
+```
+
+### CSRF Protection
+
+**CORRECT:**
+```typescript
+// Express — csrf middleware
+import { doubleCsrf } from 'csrf-csrf';
+const { doubleCsrfProtection } = doubleCsrf({ getSecret: () => process.env.CSRF_SECRET });
+app.use(doubleCsrfProtection);
+
+// Cookies — secure flags
+res.cookie('session', token, { httpOnly: true, secure: true, sameSite: 'strict' });
+```
+
+**INCORRECT:**
+```typescript
+// NEVER — cookies without secure flags
+res.cookie('session', token); // Missing httpOnly, secure, sameSite!
+res.cookie('session', token, { httpOnly: false }); // XSS can steal session!
+```
+
+### Input Validation at Boundaries
+
+**CORRECT:**
+```typescript
+// Validate ALL user input at the API boundary
+const schema = z.object({
+  email: z.string().email().max(255),
+  name: z.string().min(1).max(100).trim(),
+  age: z.number().int().min(0).max(150),
+});
+const validated = schema.parse(req.body);
+```
+
+**INCORRECT:**
+```typescript
+// NEVER trust raw user input
+const { email, name } = req.body; // No validation!
+await db.users.create({ email, name }); // Injection risk!
+```
+
+## Logging & Audit Trail Standards
+
+### What to Log
+
+**CORRECT:**
+```typescript
+// Log actions, NOT data
+logger.info({ action: 'user.login', userId: user.id, ip: req.ip });
+logger.info({ action: 'order.create', orderId: order.id, userId: user.id });
+logger.warn({ action: 'auth.failed', email: maskEmail(email), ip: req.ip });
+```
+
+**INCORRECT:**
+```typescript
+// NEVER log sensitive data
+logger.info('Login:', { email, password }); // PASSWORD IN LOGS!
+logger.info('Request body:', req.body); // May contain PII/secrets!
+console.log('Token:', jwt); // Token in logs!
+```
+
+### What Must Have Audit Trail
+- User login/logout
+- Password changes
+- Role/permission changes
+- Data deletion (soft delete preferred)
+- Payment transactions
+- Admin actions
+
+## Destructive Operations — Safety Rules
+
+### Git
+
+**BLOCKED — require explicit user confirmation:**
+```bash
+git push --force          # Use --force-with-lease as safer alternative
+git push -f               # Same as above
+git reset --hard          # Discards uncommitted work
+git push origin main      # Must go through PR, never direct push
+git branch -D             # Permanent branch deletion
+```
+
+**SAFE alternatives:**
+```bash
+git push --force-with-lease  # Safer: fails if remote changed
+git stash                    # Save work without discarding
+git revert HEAD              # Undo commit without rewriting history
+```
+
+### Database
+
+**BLOCKED — NEVER in production:**
+```bash
+npx prisma migrate reset      # Drops ALL data
+npx supabase db reset          # Drops ALL data
+DROP TABLE                     # Irreversible without backup
+DROP DATABASE                  # Catastrophic
+TRUNCATE TABLE                 # Deletes all rows
+DELETE FROM table (no WHERE)   # Deletes all rows
+```
+
+**SAFE alternatives:**
+```bash
+npx prisma migrate deploy     # Apply pending migrations only
+/migrate-db rollback          # Reverts last migration (dev only)
+# For prod: create new migration that reverts changes
+```
+
 ## Pre-commit Checklist
 
+### Code Quality
 - [ ] All interface props destructured in component?
 - [ ] Actions get auth context server-side?
 - [ ] Forms handle empty inputs correctly?
@@ -168,3 +300,13 @@ npx supabase db reset  # PROHIBITED
 - [ ] Tables with RLS have policies?
 - [ ] Providers in separate "use client" file?
 - [ ] TypeScript compiles without errors?
+
+### Security
+- [ ] No hardcoded secrets, API keys, or passwords?
+- [ ] No .env files tracked by git?
+- [ ] Input validated at API boundaries (Zod/Joi/class-validator)?
+- [ ] Auth context resolved server-side (never trust client)?
+- [ ] Rate limiting on auth endpoints?
+- [ ] Cookies have httpOnly, secure, sameSite flags?
+- [ ] No sensitive data in logs (passwords, tokens, PII)?
+- [ ] No destructive DB commands (reset, drop, truncate)?

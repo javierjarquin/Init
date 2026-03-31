@@ -1,0 +1,409 @@
+# Data Integrity — Auditoria automatizada de integridad de datos
+#
+# Este workflow valida la integridad de datos en 3 contextos:
+# 1. En cada PR: verifica que migraciones no rompan constraints
+# 2. Semanal (cron): detecta duplicados y anomalias en la DB
+# 3. Manual: para auditorias bajo demanda
+#
+# TEMPLATE: Ajusta las queries segun tu schema.
+# Las queries por defecto cubren tablas comunes de negocio.
+
+name: Data Integrity
+
+on:
+  pull_request:
+    branches: [main, development]
+    paths:
+      - 'supabase/migrations/**'
+      - 'src/modules/**/services/**'
+      - 'src/modules/import/**'
+
+  schedule:
+    # Cada lunes a las 6:00 AM UTC
+    - cron: '0 6 * * 1'
+
+  workflow_dispatch:
+    inputs:
+      check_level:
+        description: 'Nivel de auditoria'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - quick
+          - full
+          - deep
+
+concurrency:
+  group: data-integrity-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  SUPABASE_VERSION: "2"
+
+jobs:
+  # ── Job 1: Validar migraciones (en PRs) ──────────────────────────────
+  validate-migrations:
+    name: Validar migraciones SQL
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase local
+        run: supabase start -x edge-runtime,logflare,vector,imgproxy
+
+      - name: Apply migrations
+        run: supabase db push --local
+        continue-on-error: false
+
+      - name: Verificar constraints UNIQUE existen
+        run: |
+          RESULT=$(supabase db query "
+            SELECT indexname
+            FROM pg_indexes
+            WHERE indexname LIKE 'uq_%'
+            ORDER BY indexname;
+          ")
+          echo "$RESULT"
+          echo "## Constraints UNIQUE encontrados" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Verificar foreign keys
+        run: |
+          RESULT=$(supabase db query "
+            SELECT
+              tc.table_name,
+              tc.constraint_name,
+              kcu.column_name,
+              ccu.table_name AS foreign_table
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name
+            JOIN information_schema.constraint_column_usage ccu
+              ON ccu.constraint_name = tc.constraint_name
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+              AND tc.table_schema = 'public'
+            ORDER BY tc.table_name;
+          ")
+          echo "$RESULT"
+
+      - name: Verificar tablas sin tenant_id
+        run: |
+          RESULT=$(supabase db query "
+            SELECT table_name
+            FROM information_schema.tables t
+            WHERE t.table_schema = 'public'
+              AND t.table_type = 'BASE TABLE'
+              AND t.table_name NOT IN ('schema_migrations', 'audit_log', 'brands', 'models', 'permissions')
+              AND NOT EXISTS (
+                SELECT 1 FROM information_schema.columns c
+                WHERE c.table_name = t.table_name
+                  AND c.column_name = 'tenant_id'
+                  AND c.table_schema = 'public'
+              )
+            ORDER BY table_name;
+          ")
+          echo "Tablas de negocio SIN tenant_id:"
+          echo "$RESULT"
+          echo "## Tablas sin tenant_id" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop
+
+  # ── Job 2: Detectar duplicados (semanal + manual) ────────────────────
+  detect-duplicates:
+    name: Detectar datos duplicados
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Detectar clientes duplicados por telefono
+        run: |
+          RESULT=$(supabase db query "
+            SELECT tenant_id, phone, COUNT(*) as duplicados
+            FROM customers
+            GROUP BY tenant_id, phone
+            HAVING COUNT(*) > 1
+            ORDER BY duplicados DESC
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Clientes con telefono duplicado" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Detectar clientes duplicados por email
+        run: |
+          RESULT=$(supabase db query "
+            SELECT tenant_id, email, COUNT(*) as duplicados
+            FROM customers
+            WHERE email IS NOT NULL
+            GROUP BY tenant_id, email
+            HAVING COUNT(*) > 1
+            ORDER BY duplicados DESC
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Clientes con email duplicado" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Detectar vehiculos duplicados por VIN
+        run: |
+          RESULT=$(supabase db query "
+            SELECT tenant_id, vin, COUNT(*) as duplicados
+            FROM vehicles
+            WHERE vin IS NOT NULL
+            GROUP BY tenant_id, vin
+            HAVING COUNT(*) > 1
+            ORDER BY duplicados DESC
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Vehiculos con VIN duplicado" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Detectar vehiculos duplicados por placas
+        run: |
+          RESULT=$(supabase db query "
+            SELECT tenant_id, plates, COUNT(*) as duplicados
+            FROM vehicles
+            WHERE plates IS NOT NULL
+            GROUP BY tenant_id, plates
+            HAVING COUNT(*) > 1
+            ORDER BY duplicados DESC
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Vehiculos con placas duplicadas" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Detectar productos duplicados por codigo
+        run: |
+          RESULT=$(supabase db query "
+            SELECT tenant_id, internal_code, COUNT(*) as duplicados
+            FROM products
+            WHERE internal_code IS NOT NULL
+            GROUP BY tenant_id, internal_code
+            HAVING COUNT(*) > 1
+            ORDER BY duplicados DESC
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Productos con codigo interno duplicado" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Detectar proveedores duplicados por RFC
+        run: |
+          RESULT=$(supabase db query "
+            SELECT tenant_id, rfc, COUNT(*) as duplicados
+            FROM suppliers
+            WHERE rfc IS NOT NULL
+            GROUP BY tenant_id, rfc
+            HAVING COUNT(*) > 1
+            ORDER BY duplicados DESC
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Proveedores con RFC duplicado" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Detectar marcas duplicadas
+        run: |
+          RESULT=$(supabase db query "
+            SELECT name, COUNT(*) as duplicados
+            FROM brands
+            GROUP BY name
+            HAVING COUNT(*) > 1
+            ORDER BY duplicados DESC
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Marcas duplicadas" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # ── Job 3: Anomalias de negocio (semanal + manual) ───────────────────
+  business-anomalies:
+    name: Detectar anomalias de negocio
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Precios invalidos (productos)
+        run: |
+          RESULT=$(supabase db query "
+            SELECT id, name, sale_price
+            FROM products
+            WHERE sale_price <= 0 OR sale_price IS NULL
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Productos con precio invalido" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Precios invalidos (servicios)
+        run: |
+          RESULT=$(supabase db query "
+            SELECT id, name, base_price
+            FROM service_catalog
+            WHERE base_price <= 0 OR base_price IS NULL
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Servicios con precio invalido" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Stock minimo mayor que maximo
+        run: |
+          RESULT=$(supabase db query "
+            SELECT id, name, min_stock, max_stock
+            FROM products
+            WHERE min_stock IS NOT NULL
+              AND max_stock IS NOT NULL
+              AND min_stock > max_stock
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Productos con stock min > max" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Inventario negativo
+        run: |
+          RESULT=$(supabase db query "
+            SELECT i.id, p.name, i.available_qty, i.reserved_qty
+            FROM inventory i
+            JOIN products p ON p.id = i.product_id
+            WHERE i.available_qty < 0
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Inventario con cantidad negativa" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: OS sin cliente o vehiculo
+        run: |
+          RESULT=$(supabase db query "
+            SELECT id, folio, status
+            FROM service_orders
+            WHERE customer_id IS NULL OR vehicle_id IS NULL
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Ordenes sin cliente o vehiculo" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Folios vacios
+        run: |
+          RESULT=$(supabase db query "
+            SELECT 'service_orders' as tabla, COUNT(*) as vacios FROM service_orders WHERE folio IS NULL OR folio = ''
+            UNION ALL
+            SELECT 'quotes', COUNT(*) FROM quotes WHERE folio IS NULL OR folio = ''
+            UNION ALL
+            SELECT 'purchase_orders', COUNT(*) FROM purchase_orders WHERE folio IS NULL OR folio = ''
+            UNION ALL
+            SELECT 'invoices', COUNT(*) FROM invoices WHERE folio IS NULL OR folio = '';
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Registros con folio vacio" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Pagos que exceden total de OS
+        run: |
+          RESULT=$(supabase db query "
+            SELECT so.id, so.folio, so.total as total_os,
+                   COALESCE(SUM(p.amount), 0) as total_pagado,
+                   COALESCE(SUM(p.amount), 0) - so.total as excedente
+            FROM service_orders so
+            JOIN payments p ON p.service_order_id = so.id
+            GROUP BY so.id, so.folio, so.total
+            HAVING COALESCE(SUM(p.amount), 0) > so.total
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Pagos que exceden total de OS" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Clientes sin nombre
+        run: |
+          RESULT=$(supabase db query "
+            SELECT id, phone, email
+            FROM customers
+            WHERE first_name IS NULL OR first_name = ''
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Clientes sin nombre" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Vehiculos con ano invalido
+        run: |
+          RESULT=$(supabase db query "
+            SELECT id, plates, vin, year
+            FROM vehicles
+            WHERE year < 1900 OR year > EXTRACT(YEAR FROM NOW()) + 2
+            LIMIT 50;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Vehiculos con ano invalido" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # ── Job 4: Resumen ───────────────────────────────────────────────────
+  summary:
+    name: Generar resumen
+    runs-on: ubuntu-latest
+    needs: [detect-duplicates, business-anomalies]
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Resumen de auditoria
+        run: |
+          echo "# Auditoria de Integridad de Datos" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Fecha:** $(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Revisa los detalles de cada job para ver los resultados." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> Para corregir problemas, usa el skill \`/data-integrity\` en Claude Code." >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,53 @@
+{
+  "// ─── INSTRUCCIONES ─────────────────────────────────────────────────────": "",
+  "// Copia este archivo a ~/.claude/keybindings.json para personalizar atajos.": "",
+  "// Docs: https://docs.anthropic.com/claude-code/keybindings": "",
+  "// ───────────────────────────────────────────────────────────────────────": "",
+
+  "// Atajos de ejemplo (descomenta los que quieras usar):": "",
+
+  "bindings": [
+    {
+      "// description": "Enviar mensaje con Ctrl+Enter en vez de Enter",
+      "// key": "ctrl+enter",
+      "// action": "chat.submit",
+      "// context": "chat"
+    },
+    {
+      "// description": "Limpiar pantalla con Ctrl+L",
+      "// key": "ctrl+l",
+      "// action": "app.clear",
+      "// context": "app"
+    },
+    {
+      "// description": "Modo vim para edicion de prompts",
+      "// key": "escape",
+      "// action": "chat.vim.normal",
+      "// context": "chat"
+    },
+    {
+      "// description": "Aprobar accion rapidamente con Ctrl+Y",
+      "// key": "ctrl+y",
+      "// action": "permission.approve",
+      "// context": "permission"
+    },
+    {
+      "// description": "Rechazar accion con Ctrl+N",
+      "// key": "ctrl+n",
+      "// action": "permission.deny",
+      "// context": "permission"
+    },
+    {
+      "// description": "Navegar historial hacia atras",
+      "// key": "ctrl+up",
+      "// action": "history.previous",
+      "// context": "chat"
+    },
+    {
+      "// description": "Navegar historial hacia adelante",
+      "// key": "ctrl+down",
+      "// action": "history.next",
+      "// context": "chat"
+    }
+  ]
+}

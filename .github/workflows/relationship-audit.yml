@@ -1,0 +1,412 @@
+# Relationship Audit — Auditoria de relaciones entre tablas
+#
+# Valida integridad referencial en 3 contextos:
+# 1. En cada PR con cambios a migraciones: verifica FKs nuevas/eliminadas
+# 2. Semanal (cron): detecta huerfanos y mismatches de tenant_id
+# 3. Manual: auditoria completa bajo demanda
+#
+# Requiere: SUPABASE_DB_URL como secreto para jobs contra produccion
+
+name: Relationship Audit
+
+on:
+  pull_request:
+    branches: [main, development]
+    paths:
+      - 'apps/api/src/database/migrations/**'
+      - 'apps/api/prisma/migrations/**'
+
+  schedule:
+    # Cada miercoles a las 7:00 AM UTC
+    - cron: '0 7 * * 3'
+
+  workflow_dispatch:
+    inputs:
+      check_level:
+        description: 'Nivel de auditoria'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - quick    # Solo FKs y huerfanos criticos
+          - full     # Todo excepto cascade impact
+          - deep     # Todo incluido cascade impact (lento)
+
+concurrency:
+  group: relationship-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  # ── Job 1: Validar FKs en migraciones (en PRs) ─────────────────────
+  validate-fk-migrations:
+    name: Validar foreign keys en migraciones
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply migrations
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # Aplicar migraciones en orden
+          for f in apps/api/src/database/migrations/V*.sql; do
+            echo "Applying $f..."
+            psql -h localhost -U postgres -d test_db -f "$f" 2>&1 || true
+          done
+
+      - name: Inventario de FKs
+        env:
+          PGPASSWORD: postgres
+        run: |
+          RESULT=$(psql -h localhost -U postgres -d test_db -t -A -F '|' -c "
+            SELECT
+              tc.table_schema || '.' || tc.table_name AS tabla_hija,
+              kcu.column_name AS columna_fk,
+              ccu.table_schema || '.' || ccu.table_name AS tabla_padre,
+              rc.delete_rule,
+              rc.update_rule
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+            JOIN information_schema.constraint_column_usage ccu
+              ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+            JOIN information_schema.referential_constraints rc
+              ON rc.constraint_name = tc.constraint_name AND rc.constraint_schema = tc.table_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+              AND tc.table_schema IN ('shared', 'public')
+            ORDER BY tc.table_name, kcu.column_name;
+          ")
+
+          FK_COUNT=$(echo "$RESULT" | grep -c '|' || echo 0)
+
+          echo "## Foreign Keys encontradas: $FK_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Tabla hija | Columna FK | Tabla padre | ON DELETE | ON UPDATE |" >> $GITHUB_STEP_SUMMARY
+          echo "|------------|-----------|-------------|-----------|-----------|" >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" | while IFS='|' read -r hija col padre del upd; do
+            [ -z "$hija" ] && continue
+            echo "| $hija | $col | $padre | $del | $upd |" >> $GITHUB_STEP_SUMMARY
+          done
+
+      - name: Verificar columnas _id sin FK
+        env:
+          PGPASSWORD: postgres
+        run: |
+          RESULT=$(psql -h localhost -U postgres -d test_db -t -c "
+            SELECT c.table_schema || '.' || c.table_name AS tabla,
+                   c.column_name
+            FROM information_schema.columns c
+            WHERE c.table_schema IN ('shared', 'public')
+              AND c.column_name LIKE '%_id'
+              AND c.column_name != 'tenant_id'
+              AND c.column_name != 'id'
+              AND NOT EXISTS (
+                SELECT 1
+                FROM information_schema.key_column_usage kcu
+                JOIN information_schema.table_constraints tc
+                  ON tc.constraint_name = kcu.constraint_name
+                WHERE tc.constraint_type = 'FOREIGN KEY'
+                  AND kcu.table_schema = c.table_schema
+                  AND kcu.table_name = c.table_name
+                  AND kcu.column_name = c.column_name
+              )
+            ORDER BY c.table_name, c.column_name;
+          ")
+
+          echo "## Columnas *_id SIN foreign key" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Verificar politicas de cascade peligrosas
+        env:
+          PGPASSWORD: postgres
+        run: |
+          RESULT=$(psql -h localhost -U postgres -d test_db -t -c "
+            SELECT
+              tc.table_name AS tabla_hija,
+              kcu.column_name,
+              ccu.table_name AS tabla_padre,
+              rc.delete_rule
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name
+            JOIN information_schema.constraint_column_usage ccu
+              ON ccu.constraint_name = tc.constraint_name
+            JOIN information_schema.referential_constraints rc
+              ON rc.constraint_name = tc.constraint_name
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+              AND tc.table_schema = 'shared'
+              AND rc.delete_rule = 'CASCADE'
+              AND ccu.table_name IN ('clients', 'bookings', 'payments', 'invoices', 'professionals', 'services')
+            ORDER BY ccu.table_name;
+          ")
+
+          echo "## CASCADE en tablas criticas (revisar)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # ── Job 2: Detectar huerfanos (semanal + manual) ────────────────────
+  detect-orphans:
+    name: Detectar registros huerfanos
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Bookings con client_id huerfano
+        run: |
+          RESULT=$(supabase db query "
+            SELECT b.id, b.booking_number, b.client_id
+            FROM shared.bookings b
+            LEFT JOIN shared.clients c ON b.client_id = c.id
+            WHERE b.client_id IS NOT NULL AND c.id IS NULL
+            LIMIT 20;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Bookings con client_id huerfano" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Bookings con service_id huerfano
+        run: |
+          RESULT=$(supabase db query "
+            SELECT b.id, b.booking_number, b.service_id
+            FROM shared.bookings b
+            LEFT JOIN shared.services s ON b.service_id = s.id
+            WHERE b.service_id IS NOT NULL AND s.id IS NULL
+            LIMIT 20;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Bookings con service_id huerfano" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Bookings con professional_id huerfano
+        run: |
+          RESULT=$(supabase db query "
+            SELECT b.id, b.booking_number, b.professional_id
+            FROM shared.bookings b
+            LEFT JOIN shared.professionals p ON b.professional_id = p.id
+            WHERE b.professional_id IS NOT NULL AND p.id IS NULL
+            LIMIT 20;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Bookings con professional_id huerfano" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Payments con booking_id huerfano
+        run: |
+          RESULT=$(supabase db query "
+            SELECT p.id, p.amount, p.booking_id
+            FROM shared.payments p
+            LEFT JOIN shared.bookings b ON p.booking_id = b.id
+            WHERE p.booking_id IS NOT NULL AND b.id IS NULL
+            LIMIT 20;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Payments con booking_id huerfano" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Professional_services huerfanos
+        run: |
+          RESULT=$(supabase db query "
+            SELECT 'professional_id' as tipo, COUNT(*) as huerfanos
+            FROM shared.professional_services ps
+            LEFT JOIN shared.professionals p ON ps.professional_id = p.id
+            WHERE p.id IS NULL
+            UNION ALL
+            SELECT 'service_id', COUNT(*)
+            FROM shared.professional_services ps
+            LEFT JOIN shared.services s ON ps.service_id = s.id
+            WHERE s.id IS NULL;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Professional_services huerfanos" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Invoices con client_id huerfano
+        run: |
+          RESULT=$(supabase db query "
+            SELECT i.id, i.invoice_number, i.client_id
+            FROM shared.invoices i
+            LEFT JOIN shared.clients c ON i.client_id = c.id
+            WHERE i.client_id IS NOT NULL AND c.id IS NULL
+            LIMIT 20;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Invoices con client_id huerfano" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Services con category_id huerfano
+        run: |
+          RESULT=$(supabase db query "
+            SELECT s.id, s.name, s.category_id
+            FROM shared.services s
+            LEFT JOIN shared.service_categories sc ON s.category_id = sc.id
+            WHERE s.category_id IS NOT NULL AND sc.id IS NULL
+            LIMIT 20;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Services con category_id huerfano" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Professionals con user_id huerfano
+        run: |
+          RESULT=$(supabase db query "
+            SELECT p.id, p.name, p.user_id
+            FROM shared.professionals p
+            LEFT JOIN shared.users u ON p.user_id = u.id
+            WHERE p.user_id IS NOT NULL AND u.id IS NULL
+            LIMIT 20;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Professionals con user_id huerfano" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Resumen de huerfanos (conteo)
+        run: |
+          RESULT=$(supabase db query "
+            SELECT 'bookings→clients' AS relacion, COUNT(*) AS huerfanos FROM shared.bookings b LEFT JOIN shared.clients c ON b.client_id = c.id WHERE b.client_id IS NOT NULL AND c.id IS NULL
+            UNION ALL SELECT 'bookings→services', COUNT(*) FROM shared.bookings b LEFT JOIN shared.services s ON b.service_id = s.id WHERE b.service_id IS NOT NULL AND s.id IS NULL
+            UNION ALL SELECT 'bookings→professionals', COUNT(*) FROM shared.bookings b LEFT JOIN shared.professionals p ON b.professional_id = p.id WHERE b.professional_id IS NOT NULL AND p.id IS NULL
+            UNION ALL SELECT 'payments→bookings', COUNT(*) FROM shared.payments p LEFT JOIN shared.bookings b ON p.booking_id = b.id WHERE p.booking_id IS NOT NULL AND b.id IS NULL
+            UNION ALL SELECT 'invoices→clients', COUNT(*) FROM shared.invoices i LEFT JOIN shared.clients c ON i.client_id = c.id WHERE i.client_id IS NOT NULL AND c.id IS NULL
+            UNION ALL SELECT 'commissions→professionals', COUNT(*) FROM shared.commissions co LEFT JOIN shared.professionals p ON co.professional_id = p.id WHERE co.professional_id IS NOT NULL AND p.id IS NULL
+            UNION ALL SELECT 'services→categories', COUNT(*) FROM shared.services s LEFT JOIN shared.service_categories sc ON s.category_id = sc.id WHERE s.category_id IS NOT NULL AND sc.id IS NULL
+            UNION ALL SELECT 'professionals→users', COUNT(*) FROM shared.professionals p LEFT JOIN shared.users u ON p.user_id = u.id WHERE p.user_id IS NOT NULL AND u.id IS NULL
+            ORDER BY huerfanos DESC;
+          " --db-url "$SUPABASE_DB_URL")
+          echo "## Resumen de huerfanos" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # ── Job 3: Validar tenant_id consistency (semanal + manual) ─────────
+  tenant-consistency:
+    name: Validar consistencia tenant_id en relaciones
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Mismatches de tenant_id entre tablas relacionadas
+        run: |
+          RESULT=$(supabase db query "
+            SELECT 'bookings→clients' AS relacion, COUNT(*) AS mismatches
+            FROM shared.bookings b
+            JOIN shared.clients c ON b.client_id = c.id
+            WHERE b.tenant_id != c.tenant_id
+
+            UNION ALL SELECT 'bookings→services', COUNT(*)
+            FROM shared.bookings b
+            JOIN shared.services s ON b.service_id = s.id
+            WHERE b.tenant_id != s.tenant_id
+
+            UNION ALL SELECT 'bookings→professionals', COUNT(*)
+            FROM shared.bookings b
+            JOIN shared.professionals p ON b.professional_id = p.id
+            WHERE b.professional_id IS NOT NULL AND b.tenant_id != p.tenant_id
+
+            UNION ALL SELECT 'payments→bookings', COUNT(*)
+            FROM shared.payments p
+            JOIN shared.bookings b ON p.booking_id = b.id
+            WHERE p.booking_id IS NOT NULL AND p.tenant_id != b.tenant_id
+
+            UNION ALL SELECT 'payments→clients', COUNT(*)
+            FROM shared.payments p
+            JOIN shared.clients c ON p.client_id = c.id
+            WHERE p.client_id IS NOT NULL AND p.tenant_id != c.tenant_id
+
+            UNION ALL SELECT 'invoices→clients', COUNT(*)
+            FROM shared.invoices i
+            JOIN shared.clients c ON i.client_id = c.id
+            WHERE i.client_id IS NOT NULL AND i.tenant_id != c.tenant_id
+
+            UNION ALL SELECT 'commissions→professionals', COUNT(*)
+            FROM shared.commissions co
+            JOIN shared.professionals p ON co.professional_id = p.id
+            WHERE co.professional_id IS NOT NULL AND co.tenant_id != p.tenant_id
+
+            UNION ALL SELECT 'professional_services→professionals', COUNT(*)
+            FROM shared.professional_services ps
+            JOIN shared.professionals p ON ps.professional_id = p.id
+            WHERE ps.tenant_id != p.tenant_id
+
+            UNION ALL SELECT 'schedules→professionals', COUNT(*)
+            FROM shared.schedules s
+            JOIN shared.professionals p ON s.professional_id = p.id
+            WHERE s.tenant_id != p.tenant_id
+
+            ORDER BY mismatches DESC;
+          " --db-url "$SUPABASE_DB_URL")
+
+          echo "## Mismatches de tenant_id (debe ser TODO 0)" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$RESULT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          # Fail si hay mismatches
+          if echo "$RESULT" | grep -qP '\|\s*[1-9]'; then
+            echo "::error::Se encontraron mismatches de tenant_id entre tablas relacionadas"
+            exit 1
+          fi
+
+  # ── Job 4: Resumen ──────────────────────────────────────────────────
+  summary:
+    name: Generar resumen
+    runs-on: ubuntu-latest
+    needs: [detect-orphans, tenant-consistency]
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Resumen de auditoria
+        run: |
+          echo "# Auditoria de Relaciones entre Tablas" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Fecha:** $(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Revisa los detalles de cada job arriba." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> Para corregir problemas, usa el skill \`/relationship-audit\` en Claude Code." >> $GITHUB_STEP_SUMMARY

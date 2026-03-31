@@ -1,0 +1,9 @@
+{
+  "name": "claude-code-starter-kit",
+  "description": "Kit completo con 35+ skills, 4 subagentes, reglas contextuales, hooks de seguridad y workflows CI/CD para maximizar Claude Code en cualquier proyecto.",
+  "version": "2.0.0",
+  "author": "javierjarquin",
+  "license": "MIT",
+  "repository": "https://github.com/javierjarquin/Init",
+  "homepage": "https://github.com/javierjarquin/Init#readme"
+}
