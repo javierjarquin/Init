@@ -35,7 +35,7 @@ if /i not "%CONFIRM%"=="S" (
 )
 
 echo.
-echo  [1/12] Skills (slash commands)...
+echo  [1/16] Slash commands...
 if not exist "%TARGET_DIR%\.claude\commands" mkdir "%TARGET_DIR%\.claude\commands"
 for %%f in ("%SRC%.claude\commands\*.md") do (
     if not exist "%TARGET_DIR%\.claude\commands\%%~nxf" (
@@ -47,7 +47,7 @@ for %%f in ("%SRC%.claude\commands\*.md") do (
 )
 
 echo.
-echo  [2/12] Settings + hooks...
+echo  [2/16] Settings + hooks...
 if not exist "%TARGET_DIR%\.claude" mkdir "%TARGET_DIR%\.claude"
 if not exist "%TARGET_DIR%\.claude\settings.local.json" (
     copy "%SRC%.claude\settings.local.json" "%TARGET_DIR%\.claude\settings.local.json" >nul
@@ -57,12 +57,9 @@ if not exist "%TARGET_DIR%\.claude\settings.local.json" (
 )
 
 echo.
-echo  [3/12] Subagentes personalizados...
-if not exist "%TARGET_DIR%\.claude\agents\reviewer" mkdir "%TARGET_DIR%\.claude\agents\reviewer"
-if not exist "%TARGET_DIR%\.claude\agents\researcher" mkdir "%TARGET_DIR%\.claude\agents\researcher"
-if not exist "%TARGET_DIR%\.claude\agents\db-expert" mkdir "%TARGET_DIR%\.claude\agents\db-expert"
-if not exist "%TARGET_DIR%\.claude\agents\quick-fix" mkdir "%TARGET_DIR%\.claude\agents\quick-fix"
-for %%d in (reviewer researcher db-expert quick-fix) do (
+echo  [3/16] Subagentes (10 total)...
+for %%d in (reviewer researcher db-expert quick-fix security-auditor api-architect frontend-reviewer e2e-runner performance-profiler devops-expert) do (
+    if not exist "%TARGET_DIR%\.claude\agents\%%d" mkdir "%TARGET_DIR%\.claude\agents\%%d"
     if not exist "%TARGET_DIR%\.claude\agents\%%d\%%d.md" (
         copy "%SRC%.claude\agents\%%d\%%d.md" "%TARGET_DIR%\.claude\agents\%%d\%%d.md" >nul
         echo   + %%d.md
@@ -72,7 +69,40 @@ for %%d in (reviewer researcher db-expert quick-fix) do (
 )
 
 echo.
-echo  [4/12] Reglas contextuales...
+echo  [4/16] Skills (5 total)...
+for %%s in (create-feature create-migration add-endpoint debug-flow ship-it) do (
+    if not exist "%TARGET_DIR%\.claude\skills\%%s" mkdir "%TARGET_DIR%\.claude\skills\%%s"
+    if not exist "%TARGET_DIR%\.claude\skills\%%s\SKILL.md" (
+        copy "%SRC%.claude\skills\%%s\SKILL.md" "%TARGET_DIR%\.claude\skills\%%s\SKILL.md" >nul
+        echo   + %%s/SKILL.md
+    ) else (
+        echo   - %%s/SKILL.md (ya existe)
+    )
+)
+
+echo.
+echo  [5/16] Output styles (3 total)...
+if not exist "%TARGET_DIR%\.claude\output-styles" mkdir "%TARGET_DIR%\.claude\output-styles"
+for %%f in ("%SRC%.claude\output-styles\*.md") do (
+    if not exist "%TARGET_DIR%\.claude\output-styles\%%~nxf" (
+        copy "%%f" "%TARGET_DIR%\.claude\output-styles\%%~nxf" >nul
+        echo   + %%~nxf
+    ) else (
+        echo   - %%~nxf (ya existe)
+    )
+)
+
+echo.
+echo  [6/16] Status line...
+if not exist "%TARGET_DIR%\.claude\statusline.sh" (
+    copy "%SRC%.claude\statusline.sh" "%TARGET_DIR%\.claude\statusline.sh" >nul
+    echo   + statusline.sh
+) else (
+    echo   - statusline.sh (ya existe)
+)
+
+echo.
+echo  [7/16] Reglas contextuales (7 total)...
 if not exist "%TARGET_DIR%\.claude\rules" mkdir "%TARGET_DIR%\.claude\rules"
 for %%f in ("%SRC%.claude\rules\*.md") do (
     if not exist "%TARGET_DIR%\.claude\rules\%%~nxf" (
@@ -84,7 +114,7 @@ for %%f in ("%SRC%.claude\rules\*.md") do (
 )
 
 echo.
-echo  [5/12] GitHub Actions workflows...
+echo  [8/16] GitHub Actions workflows...
 if not exist "%TARGET_DIR%\.github\workflows" mkdir "%TARGET_DIR%\.github\workflows"
 for %%f in ("%SRC%.github\workflows\*.yml") do (
     if not exist "%TARGET_DIR%\.github\workflows\%%~nxf" (
@@ -96,7 +126,7 @@ for %%f in ("%SRC%.github\workflows\*.yml") do (
 )
 
 echo.
-echo  [6/12] GitHub templates...
+echo  [9/16] GitHub templates...
 if not exist "%TARGET_DIR%\.github\ISSUE_TEMPLATE" mkdir "%TARGET_DIR%\.github\ISSUE_TEMPLATE"
 if not exist "%TARGET_DIR%\.github\pull_request_template.md" (
     copy "%SRC%.github\pull_request_template.md" "%TARGET_DIR%\.github\pull_request_template.md" >nul
@@ -114,7 +144,7 @@ for %%f in ("%SRC%.github\ISSUE_TEMPLATE\*.md") do (
 )
 
 echo.
-echo  [7/12] Process docs...
+echo  [10/16] Process docs...
 if not exist "%TARGET_DIR%\docs\procesos" mkdir "%TARGET_DIR%\docs\procesos"
 if not exist "%TARGET_DIR%\docs\adr" mkdir "%TARGET_DIR%\docs\adr"
 if not exist "%TARGET_DIR%\docs\postmortems" mkdir "%TARGET_DIR%\docs\postmortems"
@@ -128,7 +158,7 @@ for %%f in ("%SRC%docs\procesos\*.md") do (
 )
 
 echo.
-echo  [8/12] ADR template...
+echo  [11/16] ADR template...
 if not exist "%TARGET_DIR%\docs\adr\ADR-000-template.md" (
     copy "%SRC%docs\adr\ADR-000-template.md" "%TARGET_DIR%\docs\adr\ADR-000-template.md" >nul
     echo   + ADR-000-template.md
@@ -137,7 +167,7 @@ if not exist "%TARGET_DIR%\docs\adr\ADR-000-template.md" (
 )
 
 echo.
-echo  [9/12] MCP servers template...
+echo  [12/16] MCP servers (activados: context7, sequential-thinking, memory)...
 if not exist "%TARGET_DIR%\.mcp.json" (
     copy "%SRC%.mcp.json" "%TARGET_DIR%\.mcp.json" >nul
     echo   + .mcp.json
@@ -146,13 +176,16 @@ if not exist "%TARGET_DIR%\.mcp.json" (
 )
 
 echo.
-echo  [10/12] Extras (LSP, plugin, keybindings, memory)...
+echo  [13/16] LSP template...
 if not exist "%TARGET_DIR%\.lsp.json" (
     copy "%SRC%.lsp.json" "%TARGET_DIR%\.lsp.json" >nul
     echo   + .lsp.json
 ) else (
     echo   - .lsp.json (ya existe)
 )
+
+echo.
+echo  [14/16] Plugin + keybindings + memory...
 if not exist "%TARGET_DIR%\.claude-plugin" mkdir "%TARGET_DIR%\.claude-plugin"
 if not exist "%TARGET_DIR%\.claude-plugin\plugin.json" (
     copy "%SRC%.claude-plugin\plugin.json" "%TARGET_DIR%\.claude-plugin\plugin.json" >nul
@@ -174,7 +207,7 @@ if not exist "%TARGET_DIR%\MEMORY.md" (
 )
 
 echo.
-echo  [11/12] CLAUDE.md...
+echo  [15/16] CLAUDE.md...
 if not exist "%TARGET_DIR%\CLAUDE.md" (
     copy "%SRC%CLAUDE.md" "%TARGET_DIR%\CLAUDE.md" >nul
     echo   + CLAUDE.md
@@ -183,8 +216,10 @@ if not exist "%TARGET_DIR%\CLAUDE.md" (
 )
 
 echo.
+echo  [16/16] Listo!
+echo.
 echo  ======================================================
-echo    Listo! Starter kit instalado.
+echo    Starter kit instalado.
 echo  ======================================================
 echo.
 echo   Pasos siguientes:
@@ -192,11 +227,9 @@ echo     1. Edita CLAUDE.md con los datos de tu proyecto
 echo     2. Edita .claude\settings.local.json (permisos + hooks)
 echo     3. Configura .github\workflows\ (package manager + deploy)
 echo     4. Abre Claude Code en tu proyecto
-echo     5. Prueba escribiendo /status
+echo     5. Prueba /status y /ship-it
 echo.
-echo  [12/12] Listo!
-echo.
-echo   38 skills disponibles:
+echo   37 slash commands:
 echo     /feature /test-unit /e2e /review-pr /refactor /cleanup
 echo     /deploy-dev /deploy-prod /rollback /hotfix
 echo     /qa /fix-qa /audit /security-scan /perf
@@ -204,19 +237,32 @@ echo     /sprint /status /changelog /adr /docs
 echo     /debug /deps /migrate-db /code-review /validate
 echo     /flows /flow-test /ux-review /standards
 echo     /docker /env-check /a11y
-echo     /init-project /learn-project /verify-req
+echo     /init-project /learn-project /verify-req /manual
 echo.
-echo   4 subagentes:
-echo     @reviewer  @researcher  @db-expert  @quick-fix
+echo   10 subagentes:
+echo     @reviewer @researcher @db-expert @quick-fix
+echo     @security-auditor @api-architect @frontend-reviewer
+echo     @e2e-runner @performance-profiler @devops-expert
+echo.
+echo   5 skills:
+echo     create-feature  create-migration  add-endpoint
+echo     debug-flow  ship-it
+echo.
+echo   3 output styles:
+echo     concise  review-mode  teaching
 echo.
 echo   7 reglas contextuales:
-echo     tests  migrations  api-routes  components  env-files  docker  anti-hallucination
+echo     tests migrations api-routes components env-files docker anti-hallucination
+echo.
+echo   3 MCPs activados:
+echo     context7  sequential-thinking  memory
 echo.
 echo   4 workflows CI/CD:
 echo     ci.yml  cd-dev.yml  cd-prod.yml  security.yml
 echo.
 echo   Extras:
-echo     .mcp.json  .lsp.json  plugin.json  keybindings.json  MEMORY.md
+echo     .mcp.json  .lsp.json  plugin.json  keybindings.json
+echo     MEMORY.md  statusline.sh
 echo.
 
 endlocal
