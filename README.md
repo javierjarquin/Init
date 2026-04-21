@@ -4,7 +4,7 @@
 
 **Kit de inicio para maximizar el uso de Claude Code en cualquier proyecto de software.**
 
-Incluye **38 slash commands** (skills), **4 subagentes especializados**, **7 reglas contextuales**, **8 hooks de seguridad**, **4 GitHub Actions workflows**, **MCP/LSP templates**, **sistema de memoria**, **plugin manifest**, templates de procesos, GitHub templates y documentacion operacional lista para usar. Diseñado para equipos que quieren un workflow profesional de desarrollo desde el dia 1.
+Incluye **37 slash commands**, **10 subagentes especializados**, **5 skills end-to-end**, **3 output styles**, **7 reglas contextuales**, **8 hooks de seguridad**, **3 MCPs activados** (context7, sequential-thinking, memory), **status line custom**, **4 GitHub Actions workflows**, **MCP/LSP templates**, **sistema de memoria**, **plugin manifest**, templates de procesos, GitHub templates y documentacion operacional lista para usar. Diseñado para equipos que quieren un workflow profesional de desarrollo desde el dia 1 — explotando al 100% las capacidades de Claude.
 
 ---
 
@@ -13,7 +13,7 @@ Incluye **38 slash commands** (skills), **4 subagentes especializados**, **7 reg
 ```
 claude-code-starter-kit/
 ├── .claude/
-│   ├── commands/              ← 38 slash commands (skills)
+│   ├── commands/              ← 37 slash commands
 │   │   ├── feature.md         ← Scaffold de features
 │   │   ├── test-unit.md       ← Tests unitarios
 │   │   ├── e2e.md             ← Tests E2E
@@ -52,12 +52,29 @@ claude-code-starter-kit/
 │   │   ├── init-project.md    ← Setup en proyecto existente  ← NUEVO
 │   │   ├── learn-project.md   ← Extraer estandares del codigo ← NUEVO
 │   │   └── verify-req.md      ← Anti-alucinacion de reqs     ← NUEVO
-│   ├── agents/                ← 4 subagentes especializados     ← NUEVO
+│   ├── agents/                ← 10 subagentes especializados
 │   │   ├── reviewer/          ← Code review exhaustivo
 │   │   ├── researcher/        ← Investigacion tecnica
 │   │   ├── db-expert/         ← Experto en bases de datos
-│   │   └── quick-fix/         ← Correcciones rapidas
-│   ├── rules/                 ← 7 reglas contextuales           ← NUEVO
+│   │   ├── quick-fix/         ← Correcciones rapidas
+│   │   ├── security-auditor/  ← OWASP, secrets, CSP, JWT        ← NUEVO
+│   │   ├── api-architect/     ← Diseno REST + DTOs Zod          ← NUEVO
+│   │   ├── frontend-reviewer/ ← React/Next.js + a11y + perf     ← NUEVO
+│   │   ├── e2e-runner/        ← Playwright + debug de flaky     ← NUEVO
+│   │   ├── performance-profiler/ ← N+1, bundle, Core Web Vitals ← NUEVO
+│   │   └── devops-expert/     ← Docker, CI/CD, deploys          ← NUEVO
+│   ├── skills/                ← 5 skills end-to-end             ← NUEVO
+│   │   ├── create-feature/    ← Feature completa: DB → API → UI → tests
+│   │   ├── create-migration/  ← Migracion segura con rollback
+│   │   ├── add-endpoint/      ← Endpoint aislado + DTO + tests
+│   │   ├── debug-flow/        ← Debug sistematico (repro → aislar → fix)
+│   │   └── ship-it/           ← Pre-flight: lint+types+tests+build+commit
+│   ├── output-styles/         ← 3 estilos de respuesta          ← NUEVO
+│   │   ├── concise.md         ← Ultra-cortas, sin preambulos
+│   │   ├── review-mode.md     ← Formato de code review
+│   │   └── teaching.md        ← Explica el POR QUE
+│   ├── statusline.sh          ← Status line custom (rama, dirty) ← NUEVO
+│   ├── rules/                 ← 7 reglas contextuales
 │   │   ├── tests.md           ← Reglas para archivos de test
 │   │   ├── migrations.md      ← Reglas para migraciones
 │   │   ├── api-routes.md      ← Reglas para rutas/controllers
@@ -176,11 +193,14 @@ Copia solo lo que necesites segun tu caso:
 **Nivel 3 — Equipo completo** (todo):
 ```
 📋 CLAUDE.md
-📋 .claude/settings.local.json
-📂 .claude/commands/*.md             ← 38 skills
-📂 .claude/agents/*/                 ← 4 subagentes
+📋 .claude/settings.local.json       ← Hooks + statusLine config
+📂 .claude/commands/*.md             ← 37 slash commands
+📂 .claude/agents/*/                 ← 10 subagentes
+📂 .claude/skills/*/                 ← 5 skills end-to-end
+📂 .claude/output-styles/*.md        ← 3 output styles
+📋 .claude/statusline.sh             ← Status line custom
 📂 .claude/rules/*.md                ← 7 reglas contextuales
-📋 .mcp.json                         ← MCP servers
+📋 .mcp.json                         ← 3 MCPs activados + opcionales
 📋 .lsp.json                         ← LSP servers
 📋 MEMORY.md                         ← Memoria
 📋 keybindings.json                  ← Atajos
@@ -411,7 +431,7 @@ claude
 
 ## Subagentes Especializados
 
-El kit incluye **4 subagentes** que Claude Code puede delegar tareas automaticamente. Cada uno tiene un modelo, herramientas y reglas optimizadas para su trabajo.
+El kit incluye **10 subagentes** que Claude Code puede delegar tareas automaticamente. Cada uno tiene un modelo, herramientas y reglas optimizadas para su trabajo.
 
 ### Como funcionan
 
@@ -439,6 +459,12 @@ Los subagentes son "mini-Claude" especializados que se ejecutan en su propio con
 | `@researcher` | Sonnet | Investigacion tecnica con busqueda web | Antes de implementar, comparar alternativas |
 | `@db-expert` | Sonnet | Base de datos: schema, queries, migraciones | Cambios de BD, optimizacion, modelado |
 | `@quick-fix` | Haiku | Correcciones rapidas (lint, typos, imports) | Fixes triviales que no ameritan analisis |
+| `@security-auditor` | Sonnet | OWASP Top 10, secrets, CSP, JWT, RLS | Pre-deploy a prod, auditoria de seguridad |
+| `@api-architect` | Sonnet | REST/DTOs Zod, codigos HTTP, paginacion | Disenar endpoints nuevos, refactor de API |
+| `@frontend-reviewer` | Sonnet | React/Next.js, a11y, re-renders, bundle | PRs de UI, performance en frontend |
+| `@e2e-runner` | Sonnet | Playwright + analisis de flaky tests | Validar flujos, debuggear tests rotos |
+| `@performance-profiler` | Sonnet | N+1, indices, bundle bloat, CWV | Algo se siente lento, antes de deploy |
+| `@devops-expert` | Sonnet | Docker, CI/CD, env, reverse proxy | Setup infra, debug deploy, refactor Dockerfile |
 
 ### Detalle de cada agente
 
@@ -467,6 +493,48 @@ Los subagentes son "mini-Claude" especializados que se ejecutan en su propio con
 - Corrige lint errors, imports, typos
 - No sobre-analiza: hace el cambio y listo
 - Se limita a cambios pequenos
+
+**@security-auditor** — Pentest defensivo:
+- OWASP Top 10 completo (injection, IDOR, auth failures, etc.)
+- Detecta secrets hardcodeados en codigo e historia de git
+- Valida headers de seguridad (CSP, HSTS, X-Frame-Options)
+- Revisa JWT, passwords hashing, rate limiting
+- Reporta con CWE, PoC y fix concreto
+
+**@api-architect** — Disena APIs consistentes:
+- REST idiomatico (verbos + recursos plurales + jerarquia)
+- DTOs input/output con Zod compartidos frontend/backend
+- Codigos HTTP correctos (200/201/204/400/401/403/404/409/422/429)
+- Paginacion estandar, versionado desde v1
+- Errores estructurados `{ error: { code, message, details } }`
+
+**@frontend-reviewer** — Audita UI:
+- Accesibilidad WCAG 2.1 AA (labels, contraste, teclado)
+- Performance (re-renders, memoizacion, bundle size)
+- Patrones React (props drilling, componentes gigantes, hooks mal usados)
+- Next.js: SSR vs client, Image, metadata, code splitting
+- UX polish: loading/empty/error states, optimistic updates
+
+**@e2e-runner** — Playwright focused:
+- Ejecuta suites (completas o filtradas por tag)
+- Separa bug real vs selector roto vs flaky vs timing vs datos
+- Elimina `waitForTimeout`, usa web-first assertions
+- Trace viewer, screenshots, videos
+- Propone fix concreto: app o test
+
+**@performance-profiler** — Solo optimiza con evidencia:
+- Baseline cuantificado ANTES de optimizar
+- Backend: EXPLAIN ANALYZE, indices, N+1, pools
+- Frontend: LCP/INP/CLS, bundle analyzer, waterfalls
+- Regla 80/20: top 3 bottlenecks, ignora el resto
+- Reporta ganancia estimada y real
+
+**@devops-expert** — Infra reproducible y segura:
+- Dockerfiles multi-stage con cache optimizado
+- Docker Compose con healthchecks + depends_on
+- CI/CD: cache de deps, matrix, secrets, rollback automatico
+- Non-root users, no `:latest`, no secretos en capas
+- Debug de deploys fallidos (logs, network, env)
 
 ### Personalizar agentes
 
@@ -499,6 +567,182 @@ Eres un agente especializado en...
 ```
 
 Claude Code detecta automaticamente los agentes en `.claude/agents/`.
+
+---
+
+## Skills End-to-End
+
+Las **skills** son flujos estructurados que Claude invoca cuando detecta una intencion clara del usuario. A diferencia de los slash commands (que son comandos que TU ejecutas), las skills se activan automaticamente por lenguaje natural.
+
+### Skills incluidas
+
+| Skill | Se activa cuando pides... | Que hace |
+|-------|---------------------------|----------|
+| `create-feature` | "agrega la feature de X", "crea el modulo de Y" | Feature completa end-to-end: schema → migracion → DTOs Zod → endpoints → hooks React Query → UI → tests unit + E2E |
+| `create-migration` | "crea migracion para X", "agrega columna Y" | Migracion segura con rollback, idempotente, patron expand/contract para tablas con datos |
+| `add-endpoint` | "agrega endpoint POST /x" | Endpoint aislado: DTO Zod + handler + guards + tests, sin tocar DB ni UI |
+| `debug-flow` | "hay un bug en X", "no funciona Y" | Reproduce → aisla → hipotesis → valida → fix minimo → test de regresion |
+| `ship-it` | "ya termine, haz commit", "deploy a dev" | Pre-flight completo: lint + typecheck + tests + build + security scan + commit bien formado |
+
+### Ejemplo de uso
+
+```
+> Agrega la feature de proveedores con nombre, RFC y contacto
+→ Claude activa la skill `create-feature`:
+  1. Pregunta alcance (confirmacion)
+  2. Detecta stack en CLAUDE.md
+  3. Crea schema Drizzle en packages/db
+  4. Genera migracion con rollback
+  5. Crea schemas Zod en packages/schemas
+  6. Crea modulo NestJS con CRUD + guards
+  7. Crea hooks React Query
+  8. Crea UI (lista + detalle + forms)
+  9. Escribe tests unit + E2E
+  10. Ejecuta /ship-it y commitea
+```
+
+```
+> ya termine, subelo
+→ Claude activa la skill `ship-it`:
+  1. git status
+  2. pnpm lint
+  3. pnpm exec tsc --noEmit
+  4. pnpm test
+  5. pnpm test:e2e
+  6. pnpm build
+  7. git diff (busca secretos)
+  8. Genera commit message conventional
+  9. Commit + push
+```
+
+### Personalizar skills
+
+Crea `.claude/skills/mi-skill/SKILL.md`:
+
+```markdown
+---
+name: mi-skill
+description: Cuando se activa esta skill (frases que la disparan)
+---
+
+# Skill: Mi Skill
+
+## Cuando activar
+- "haz X"
+- "necesito Y"
+
+## Proceso
+1. Paso 1
+2. Paso 2
+
+## Anti-patrones
+- No hagas Z
+```
+
+---
+
+## Output Styles
+
+Los **output styles** cambian el tono y formato de las respuestas de Claude. Se activan con `/output-style <nombre>`.
+
+### Estilos incluidos
+
+| Estilo | Para que sirve | Cuando usar |
+|--------|----------------|-------------|
+| `concise` | Respuestas ultra-cortas, cero preambulo | Tareas repetitivas donde ya conoces el contexto |
+| `review-mode` | Formato de code review con severidad y line refs | Auditorias de PRs, code reviews |
+| `teaching` | Explica el POR QUE, compara alternativas | Aprender stacks nuevos, entender codigo legacy |
+
+### Ejemplo: Concise Mode
+
+```
+> /output-style concise
+> agrega un boton de logout al topbar
+
+# Respuesta en concise mode:
+[edit Topbar.tsx]
+Listo.
+```
+
+### Ejemplo: Teaching Mode
+
+```
+> /output-style teaching
+> por que usamos Drizzle en vez de Prisma?
+
+# Respuesta en teaching mode:
+
+## Contexto
+Ambos son ORMs TypeScript para PostgreSQL...
+
+### Opciones consideradas
+1. **Prisma** — pros: madurez. contras: runtime pesado, DSL proprietario
+2. **Drizzle** — pros: TypeScript-first, SQL-like. contras: ecosistema mas joven
+
+### Eleccion
+Drizzle por [razones concretas del proyecto]
+
+### Puntos clave
+- Drizzle es un query builder, Prisma es un ORM completo
+- Drizzle infiere tipos desde el schema (zero runtime overhead)
+- Ambos soportan migraciones, pero Drizzle es mas transparente
+```
+
+---
+
+## Status Line Custom
+
+El starter incluye `.claude/statusline.sh` que muestra en la barra inferior de Claude Code:
+
+```
+claude-opus-4-7 | ⎇ development ●3 ↑2
+         ^              ^           ^  ^
+         modelo         rama        3 archivos modificados
+                                       2 commits ahead del remote
+```
+
+- **Rojo** si estas en `main` o `master` (para recordarte crear rama)
+- **Amarillo** `●N` si hay archivos sin commitear
+- **Cyan** `↑N` si hay commits sin push
+
+Activado en `settings.local.json`:
+```json
+"statusLine": {
+  "type": "command",
+  "command": "bash .claude/statusline.sh"
+}
+```
+
+---
+
+## MCPs Activados
+
+El starter incluye **3 MCPs activos** por defecto (descargables via `npx`, sin config adicional):
+
+| MCP | Para que sirve |
+|-----|----------------|
+| `context7` | Documentacion oficial siempre actualizada de libs/frameworks. Preferir sobre busqueda web para docs |
+| `sequential-thinking` | Razonamiento paso-a-paso estructurado para problemas complejos |
+| `memory` | Knowledge graph persistente con entidades y relaciones |
+
+### MCPs opcionales (comentados en `.mcp.json`)
+
+Descomenta y configura los que necesites:
+
+- `github` — Issues, PRs, repos (requiere `GITHUB_PERSONAL_ACCESS_TOKEN`)
+- `postgres` — Queries directas a PostgreSQL
+- `filesystem` — Acceso a directorios fuera del proyecto
+- `brave-search` — Busqueda web (requiere `BRAVE_API_KEY`)
+- `sentry` — Errores y performance (requiere `SENTRY_AUTH_TOKEN`)
+- `slack` — Enviar mensajes y leer canales
+
+### Ejemplo: usar context7 durante desarrollo
+
+```
+> necesito integrar Stripe — como es el flujo de checkout con Next.js?
+→ Claude usa context7 para leer docs oficiales de Stripe actualizadas
+→ Genera codigo basado en la API actual, no en su memoria entrenada
+```
 
 ---
 
@@ -702,8 +946,8 @@ claude --plugin-dir /ruta/al/starter-kit
 ```json
 {
   "name": "claude-code-starter-kit",
-  "description": "Kit completo con 35+ skills, 4 subagentes, reglas contextuales...",
-  "version": "2.0.0",
+  "description": "Kit completo con 37 slash commands, 10 subagentes, 5 skills, 3 output styles, 3 MCPs, status line, reglas contextuales, hooks y workflows CI/CD.",
+  "version": "3.0.0",
   "author": "javierjarquin",
   "license": "MIT"
 }

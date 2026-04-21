@@ -1,72 +1,62 @@
 {
   "mcpServers": {
-    "// ─── INSTRUCCIONES ───────────────────────────────────────────────": {},
-    "// Descomenta y configura los servidores MCP que necesites.": {},
-    "// Cada servidor le da a Claude Code acceso a servicios externos.": {},
-    "// Docs: https://modelcontextprotocol.io/": {},
-
-    "// ─── BASE DE DATOS ───────────────────────────────────────────────": {},
-    "// postgres": {
-      "// command": "npx",
-      "// args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://user:pass@localhost:5432/mydb"],
-      "// description": "Acceso directo a PostgreSQL — queries, schema, tablas"
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"],
+      "description": "Documentacion oficial siempre actualizada de librerias, frameworks, SDKs y APIs. Preferir sobre busqueda web para docs de libs."
     },
 
-    "// sqlite": {
-      "// command": "npx",
-      "// args": ["-y", "@modelcontextprotocol/server-sqlite", "./data/database.sqlite"],
-      "// description": "Acceso a SQLite para proyectos ligeros"
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "description": "Razonamiento paso-a-paso estructurado para problemas complejos, diseno de arquitectura y debugging profundo."
     },
 
-    "// ─── FILESYSTEM ──────────────────────────────────────────────────": {},
-    "// filesystem": {
-      "// command": "npx",
-      "// args": ["-y", "@modelcontextprotocol/server-filesystem", "/ruta/a/directorio/permitido"],
-      "// description": "Acceso controlado a directorios fuera del proyecto"
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "description": "Knowledge graph persistente con entidades y relaciones. Complementa el sistema de memoria de archivos."
     },
 
-    "// ─── BUSQUEDA WEB ────────────────────────────────────────────────": {},
-    "// brave-search": {
-      "// command": "npx",
-      "// args": ["-y", "@modelcontextprotocol/server-brave-search"],
-      "// env": {
-        "// BRAVE_API_KEY": "tu-api-key-aqui"
-      },
-      "// description": "Busqueda web via Brave Search API"
-    },
+    "// ─── OPCIONALES — descomenta y configura si los necesitas ──────": {},
 
-    "// ─── GIT & GITHUB ────────────────────────────────────────────────": {},
     "// github": {
       "// command": "npx",
       "// args": ["-y", "@modelcontextprotocol/server-github"],
-      "// env": {
-        "// GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xxxxxxxxxxxx"
-      },
-      "// description": "Acceso avanzado a GitHub — issues, PRs, repos, actions"
+      "// env": { "// GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xxxxxxxxxxxx" },
+      "// description": "Issues, PRs, repos, actions desde Claude"
     },
 
-    "// ─── MONITOREO ───────────────────────────────────────────────────": {},
+    "// postgres": {
+      "// command": "npx",
+      "// args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://user:pass@localhost:5432/mydb"],
+      "// description": "Queries directas a PostgreSQL (read-only por defecto)"
+    },
+
+    "// filesystem": {
+      "// command": "npx",
+      "// args": ["-y", "@modelcontextprotocol/server-filesystem", "/ruta/permitida"],
+      "// description": "Acceso a directorios fuera del proyecto"
+    },
+
+    "// brave-search": {
+      "// command": "npx",
+      "// args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "// env": { "// BRAVE_API_KEY": "tu-api-key" },
+      "// description": "Busqueda web via Brave API"
+    },
+
     "// sentry": {
       "// command": "npx",
       "// args": ["-y", "@sentry/mcp-server"],
-      "// env": {
-        "// SENTRY_AUTH_TOKEN": "tu-token-aqui"
-      },
-      "// description": "Acceso a Sentry — errores, issues, performance"
+      "// env": { "// SENTRY_AUTH_TOKEN": "tu-token" },
+      "// description": "Errores, issues y performance desde Sentry"
     },
 
-    "// ─── NOTIFICACIONES ──────────────────────────────────────────────": {},
     "// slack": {
       "// command": "npx",
       "// args": ["-y", "@anthropic/claude-ai-slack-mcp"],
-      "// description": "Integración con Slack — enviar mensajes, leer canales"
-    },
-
-    "// ─── MEMORIA Y CONOCIMIENTO ──────────────────────────────────────": {},
-    "// memory": {
-      "// command": "npx",
-      "// args": ["-y", "@modelcontextprotocol/server-memory"],
-      "// description": "Base de conocimiento persistente con grafo de entidades"
+      "// description": "Enviar mensajes y leer canales de Slack"
     }
   }
 }
